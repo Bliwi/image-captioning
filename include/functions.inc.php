@@ -108,7 +108,12 @@ function chatgpt_handle_batch_action($action, $collection) {
       return array();
     }
     // Get API key and model from configuration
-    $chatgpt_conf = isset($conf['chatgpt_captioner']);
+    $chatgpt_conf = unserialize($conf['chatgpt_captioner']);
+    
+    // Validate configuration
+    if (empty($chatgpt_conf['api_key']) || $chatgpt_conf['api_key'] == 'sk-your-openai-api-key') {
+      return array_fill_keys(array_keys($images_data), "Error: API key not configured");
+    }
     
     $api_key = $chatgpt_conf['api_key'];
     $model = $chatgpt_conf['model'];
@@ -235,10 +240,15 @@ function chatgpt_handle_batch_action($action, $collection) {
     
     // Get API key and model from configuration
     if (!isset($conf['chatgpt_captioner'])) {
-      return array();
+      return "Error: ChatGPT configuration not found";
     }
     // Get API key and model from configuration
-    $chatgpt_conf = isset($conf['chatgpt_captioner']);
+    $chatgpt_conf = unserialize($conf['chatgpt_captioner']);
+    
+    // Validate configuration
+    if (empty($chatgpt_conf['api_key']) || $chatgpt_conf['api_key'] == 'sk-your-openai-api-key') {
+      return "Error: API key not configured";
+    }
     
     $api_key = $chatgpt_conf['api_key'];
     $model = $chatgpt_conf['model'];
