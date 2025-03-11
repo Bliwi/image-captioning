@@ -8,97 +8,113 @@ function chatgpt_handle_batch_action($action, $collection) {
       return;
     }
     
-    // Process each image
-    $processed = 0;
-    $errors = 0;
-    $error_messages = array();
-    $batch_size = 5; // Process images in batches of 5
+    // Add images to the processing queue instead of processing them directly
+    include_once(CHATGPT_PATH . 'include/queue.inc.php');
     
-    // Prepare batches
-    $batches = array_chunk($collection, $batch_size);
+    // Ensure the queue table exists
+    chatgpt_create_queue_table();
     
-    foreach ($batches as $batch) {
-      $batch_data = [];
-      $image_paths = [];
-      
-      // Prepare image data for this batch
-      foreach ($batch as $image_id) {
-        // Get the image path
-        $query = "
-          SELECT path 
-          FROM " . IMAGES_TABLE . " 
-          WHERE id = " . $image_id;
-        $result = pwg_query($query);
-        $image = pwg_db_fetch_assoc($result);
-        
-        if (!$image) {
-          $errors++;
-          continue;
-        }
-        
-        // Get full path to original image
-        $image_path = chatgpt_get_image_path($image);
-        
-        if (!file_exists($image_path)) {
-          $errors++;
-          $error_messages[] = "Image #$image_id: File not found at $image_path";
-          continue;
-        }
-        
-        // Resize image if needed
-        $resized_image_path = chatgpt_resize_image($image_path);
-        if ($resized_image_path === false) {
-          $errors++;
-          $error_messages[] = "Image #$image_id: Could not process image for API submission";
-          continue;
-        }
-        
-        // Encode image to base64
-        $image_data = base64_encode(file_get_contents($resized_image_path));
-        
-        // Clean up temp file if we created one
-        if ($resized_image_path !== $image_path) {
-          unlink($resized_image_path);
-        }
-        
-        // Add to batch data
-        $batch_data[$image_id] = $image_data;
-        $image_paths[$image_id] = $image_path;
-      }
-      
-      // Process the batch if we have images
-      if (!empty($batch_data)) {
-        $captions = chatgpt_generate_captions_batch($batch_data);
-        
-        // Process the results
-        foreach ($captions as $image_id => $caption) {
-          if (strpos($caption, 'Error:') === 0) {
-            $errors++;
-            $error_messages[] = "Image #$image_id: $caption";
-            continue;
-          }
-          
-          // Update description
-          chatgpt_update_description($image_id, $caption);
-          $processed++;
-        }
-      }
+    // Add images to the queue
+    $added = chatgpt_queue_images($collection);
+    
+    // Show success message
+    if ($added > 0) {
+      $page['infos'][] = "Added $added images to the processing queue. They will be captioned in the background.";
+    } else {
+      $page['infos'][] = "No new images were added to the processing queue. They may already be queued.";
     }
     
-    // Show success/error messages
-    if ($processed > 0) {
-      $page['infos'][] = "Successfully generated captions for $processed images.";
-    }
-    
-    if ($errors > 0) {
-      $page['errors'][] = "Failed to process $errors images.";
-      foreach ($error_messages as $error) {
-        $page['errors'][] = $error;
-      }
+    // Trigger the processing event
+    if ($added > 0) {
+      add_event_handler('init', 'chatgpt_process_queue', EVENT_HANDLER_PRIORITY_NEUTRAL, 2);
     }
     
     // Return true to indicate that we've handled the action
     return true;
+  }
+  
+  // Function to process the image queue
+  function chatgpt_process_queue() {
+    // Include queue functions
+    include_once(CHATGPT_PATH . 'include/queue.inc.php');
+    
+    // Get pending images (limit to 5 at a time to avoid timeouts)
+    $image_ids = chatgpt_get_pending_images(5);
+    
+    if (empty($image_ids)) {
+      return; // No images to process
+    }
+    
+    // Mark images as being processed
+    chatgpt_mark_images_processing($image_ids);
+    
+    // Process each image
+    $batch_data = [];
+    $image_paths = [];
+    $errors = [];
+    
+    // Prepare image data for this batch
+    foreach ($image_ids as $image_id) {
+      // Get the image path
+      $query = "
+        SELECT path 
+        FROM " . IMAGES_TABLE . " 
+        WHERE id = " . $image_id;
+      $result = pwg_query($query);
+      $image = pwg_db_fetch_assoc($result);
+      
+      if (!$image) {
+        chatgpt_mark_image_failed($image_id, "Image not found in database");
+        continue;
+      }
+      
+      // Get full path to original image
+      $image_path = chatgpt_get_image_path($image);
+      
+      if (!file_exists($image_path)) {
+        chatgpt_mark_image_failed($image_id, "File not found at $image_path");
+        continue;
+      }
+      
+      // Resize image if needed
+      $resized_image_path = chatgpt_resize_image($image_path);
+      if ($resized_image_path === false) {
+        chatgpt_mark_image_failed($image_id, "Could not process image for API submission");
+        continue;
+      }
+      
+      // Encode image to base64
+      $image_data = base64_encode(file_get_contents($resized_image_path));
+      
+      // Clean up temp file if we created one
+      if ($resized_image_path !== $image_path) {
+        unlink($resized_image_path);
+      }
+      
+      // Add to batch data
+      $batch_data[$image_id] = $image_data;
+      $image_paths[$image_id] = $image_path;
+    }
+    
+    // Process the batch if we have images
+    if (!empty($batch_data)) {
+      $captions = chatgpt_generate_captions_batch($batch_data);
+      
+      // Process the results
+      foreach ($captions as $image_id => $caption) {
+        if (strpos($caption, 'Error:') === 0) {
+          chatgpt_mark_image_failed($image_id, $caption);
+          continue;
+        }
+        
+        // Update description
+        chatgpt_update_description($image_id, $caption);
+        chatgpt_mark_image_completed($image_id);
+      }
+    }
+    
+    // Clean up old entries (older than 7 days)
+    chatgpt_cleanup_queue(7);
   }
   
   // Function to generate captions for multiple images in a batch
