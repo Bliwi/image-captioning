@@ -31,8 +31,15 @@ Clone this repo inside of your piwigo/plugins folder.
 ## Notes
 
 - I'm not experienced with PHP and this plugin is still in early development, please open an issue for any bugs you may find.
-- PR's and contributions to help maintain the plugin are welcome.
+- PR's and contributions to help maintain the plugin and implement new features are welcome.
 
+---
+## Todo's
+ - [x] ~Batch manager integration.~
+ - [ ] Overhaul the code to follow piwigo's plugin guidelines.
+ - [ ] Server-sided captioning.
+ - [ ] Single mode button.
+ - [ ] Process new images automatically.
 ---
 
 ## Acknowledgments
