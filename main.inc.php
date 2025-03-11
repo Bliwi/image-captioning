@@ -4,7 +4,7 @@ Plugin Name: ChatGPT Image Captioner
 Version: 1.1.0
 Description: Uses ChatGPT API (GPT-4o) to automatically generate captions for images
 and add them to image descriptions.
-Author: AI Assistant
+Author: bliwi
 */
 
 defined('PHPWG_ROOT_PATH') or die('Hacking attempt!');
