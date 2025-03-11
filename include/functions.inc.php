@@ -104,14 +104,11 @@ function chatgpt_handle_batch_action($action, $collection) {
   // Function to generate captions for multiple images in a batch
   function chatgpt_generate_captions_batch($images_data) {
     global $conf;
-    
+    if (!isset($conf['chatgpt_captioner'])) {
+      return array();
+    }
     // Get API key and model from configuration
-    $chatgpt_conf = isset($conf['chatgpt_captioner']) ? unserialize($conf['chatgpt_captioner']) : array(
-      'api_key' => 'sk-your-openai-api-key',
-      'model' => 'gpt-4o',
-      'system_role' => 'You are a helpful assistant that generates detailed and accurate captions for images.',
-      'user_prompt' => 'Please generate a detailed and accurate caption for this image. Describe the main subjects, setting, activities, and notable elements. Keep it under 3 sentences.'
-    );
+    $chatgpt_conf = isset($conf['chatgpt_captioner']);
     
     $api_key = $chatgpt_conf['api_key'];
     $model = $chatgpt_conf['model'];
