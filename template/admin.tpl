@@ -30,6 +30,7 @@
         <label for="model">Model:</label>
         <select name="model" id="model">
           <option value="gpt-4o" {if $MODEL == 'gpt-4o'}selected{/if}>GPT-4o</option>
+          <option value="gpt-4o-mini" {if $MODEL == 'gpt-4o-mini'}selected{/if}>GPT-4o-mini</option>
           <option value="gpt-4-vision-preview" {if $MODEL == 'gpt-4-vision-preview'}selected{/if}>GPT-4 Vision</option>
           <option value="gpt-4-turbo" {if $MODEL == 'gpt-4-turbo'}selected{/if}>GPT-4 Turbo</option>
         </select>
