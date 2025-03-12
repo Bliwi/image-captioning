@@ -40,6 +40,7 @@ Clone this repo inside of your piwigo/plugins folder.
  - [ ] Server-sided captioning.
  - [ ] Single mode button.
  - [ ] Process new images automatically.
+ - [ ] Translation support
 ---
 
 ## Acknowledgments
