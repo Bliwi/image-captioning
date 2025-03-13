@@ -67,7 +67,6 @@ function chatgpt_handle_batch_action($action, $collection) {
   }
   
   // Function to generate captions has been simplified to process one image at a time
-  // The batch processing functionality was removed as Gemini's API doesn't support it
   
   // Helper function to get the file path for an image
   function chatgpt_get_image_path($element) {
@@ -123,7 +122,13 @@ function chatgpt_handle_batch_action($action, $collection) {
     // Resize image if needed to meet API requirements
     $resized_image_path = chatgpt_resize_image($image_path);
     if ($resized_image_path === false) {
-      return "Error: Could not process image for API submission.";
+      // Get file extension to provide more specific error message
+      $file_extension = strtolower(pathinfo($image_path, PATHINFO_EXTENSION));
+      if (!in_array($file_extension, ['jpg', 'jpeg', 'png', 'gif'])) {
+        return "Error: Unsupported image format. Only JPG, PNG, and GIF formats are supported.";
+      } else {
+        return "Error: Could not process image for API submission. The file may be corrupted or in an invalid format.";
+      }
     }
   
     // Base64 encode the image
@@ -216,6 +221,23 @@ function chatgpt_handle_batch_action($action, $collection) {
   
   // Helper function to resize image if needed
   function chatgpt_resize_image($image_path) {
+    // Check if file exists
+    if (!file_exists($image_path)) {
+      return false;
+    }
+    
+    // Validate image format first
+    $image_info = @getimagesize($image_path);
+    if ($image_info === false) {
+      return false; // Not a valid image file
+    }
+    
+    // Check if image format is supported
+    $mime = $image_info['mime'];
+    if (!in_array($mime, ['image/jpeg', 'image/png', 'image/gif'])) {
+      return false; // Unsupported image format
+    }
+    
     // OpenAI recommends images under 20MB for best performance
     $max_file_size = 4 * 1024 * 1024; // 4MB for safety
     $max_dimension = 2048; // Max dimension for either width or height
@@ -224,7 +246,8 @@ function chatgpt_handle_batch_action($action, $collection) {
     $file_size = filesize($image_path);
     if ($file_size <= $max_file_size) {
       // Get dimensions
-      list($width, $height) = getimagesize($image_path);
+      $width = $image_info[0];
+      $height = $image_info[1];
       if ($width <= $max_dimension && $height <= $max_dimension) {
         return $image_path; // No resizing needed
       }
@@ -233,8 +256,9 @@ function chatgpt_handle_batch_action($action, $collection) {
     // Need to resize the image
     $temp_file = tempnam(sys_get_temp_dir(), 'piwigo_captioner_');
   
-    // Get image dimensions
-    list($width, $height) = getimagesize($image_path);
+    // Get image dimensions (we already have them from earlier validation)
+    $width = $image_info[0];
+    $height = $image_info[1];
   
     // Calculate new dimensions
     // Check for zero dimensions to prevent division by zero
@@ -247,9 +271,7 @@ function chatgpt_handle_batch_action($action, $collection) {
     $new_height = round($height * $ratio);
   
     // Create image resource based on file type
-    $image_info = getimagesize($image_path);
-    $mime = $image_info['mime'];
-  
+    // We already have $mime from earlier validation
     switch ($mime) {
       case 'image/jpeg':
         $source = imagecreatefromjpeg($image_path);
