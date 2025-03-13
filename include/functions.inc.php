@@ -95,6 +95,7 @@ function chatgpt_handle_batch_action($action, $collection) {
   
   
   // Function to generate caption for an image using Gemini API
+  // Function to generate caption for an image using Gemini API
   function chatgpt_generate_caption($image_path) {
     global $conf;
     
@@ -161,31 +162,56 @@ function chatgpt_handle_batch_action($action, $collection) {
       ]
     ];
   
-    // Initialize cURL session
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    // Set up retry mechanism
+    $max_retries = 3;
+    $retry_count = 0;
+    $retry_delay = 3; // seconds
+    
+    while ($retry_count <= $max_retries) {
+      // Initialize cURL session
+      $ch = curl_init($url);
+      curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+      curl_setopt($ch, CURLOPT_POST, true);
+      curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+      curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+      curl_setopt($ch, CURLOPT_TIMEOUT, 30);
   
-    // Execute cURL session and get the response
-    $response = curl_exec($ch);
-    $err = curl_error($ch);
-    curl_close($ch);
+      // Execute cURL session and get the response
+      $response = curl_exec($ch);
+      $err = curl_error($ch);
+      curl_close($ch);
   
-    if ($err) {
-      return "Error: $err";
+      if ($err) {
+        return "Error: $err";
+      }
+  
+      $response_data = json_decode($response, true);
+      
+      // Check for successful response
+      if (isset($response_data['candidates'][0]['content']['parts'][0]['text'])) {
+        return trim($response_data['candidates'][0]['content']['parts'][0]['text']);
+      } 
+      // Check for quota exhaustion error
+      elseif (isset($response_data['error']) && 
+              strpos($response_data['error']['message'], 'Resource has been exhausted') !== false) {
+        // If we haven't exceeded max retries, wait and try again
+        if ($retry_count < $max_retries) {
+          $retry_count++;
+          sleep($retry_delay);
+          continue;
+        }
+      }
+      
+      // If we get here, either it's a different error or we've exceeded retries
+      if (isset($response_data['error'])) {
+        return "API Error: " . $response_data['error']['message'];
+      } else {
+        return "Error: Unexpected API response format.";
+      }
     }
-  
-    $response_data = json_decode($response, true);
-    if (isset($response_data['candidates'][0]['content']['parts'][0]['text'])) {
-      return trim($response_data['candidates'][0]['content']['parts'][0]['text']);
-    } elseif (isset($response_data['error'])) {
-      return "API Error: " . $response_data['error']['message'];
-    } else {
-      return "Error: Unexpected API response format.";
-    }
+    
+    // This should not be reached, but just in case
+    return "Error: Maximum retries exceeded for API quota exhaustion.";
   }
   
   // Helper function to resize image if needed
