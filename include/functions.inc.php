@@ -8,81 +8,46 @@ function chatgpt_handle_batch_action($action, $collection) {
       return;
     }
     
-    // Process each image
+    // Process each image individually
     $processed = 0;
     $errors = 0;
     $error_messages = array();
-    $batch_size = 5; // Process images in batches of 5
     
-    // Prepare batches
-    $batches = array_chunk($collection, $batch_size);
-    
-    foreach ($batches as $batch) {
-      $batch_data = [];
-      $image_paths = [];
+    foreach ($collection as $image_id) {
+      // Get the image path
+      $query = "
+        SELECT path 
+        FROM " . IMAGES_TABLE . " 
+        WHERE id = " . $image_id;
+      $result = pwg_query($query);
+      $image = pwg_db_fetch_assoc($result);
       
-      // Prepare image data for this batch
-      foreach ($batch as $image_id) {
-        // Get the image path
-        $query = "
-          SELECT path 
-          FROM " . IMAGES_TABLE . " 
-          WHERE id = " . $image_id;
-        $result = pwg_query($query);
-        $image = pwg_db_fetch_assoc($result);
-        
-        if (!$image) {
-          $errors++;
-          continue;
-        }
-        
-        // Get full path to original image
-        $image_path = chatgpt_get_image_path($image);
-        
-        if (!file_exists($image_path)) {
-          $errors++;
-          $error_messages[] = "Image #$image_id: File not found at $image_path";
-          continue;
-        }
-        
-        // Resize image if needed
-        $resized_image_path = chatgpt_resize_image($image_path);
-        if ($resized_image_path === false) {
-          $errors++;
-          $error_messages[] = "Image #$image_id: Could not process image for API submission";
-          continue;
-        }
-        
-        // Encode image to base64
-        $image_data = base64_encode(file_get_contents($resized_image_path));
-        
-        // Clean up temp file if we created one
-        if ($resized_image_path !== $image_path) {
-          unlink($resized_image_path);
-        }
-        
-        // Add to batch data
-        $batch_data[$image_id] = $image_data;
-        $image_paths[$image_id] = $image_path;
+      if (!$image) {
+        $errors++;
+        continue;
       }
       
-      // Process the batch if we have images
-      if (!empty($batch_data)) {
-        $captions = chatgpt_generate_captions_batch($batch_data);
-        
-        // Process the results
-        foreach ($captions as $image_id => $caption) {
-          if (strpos($caption, 'Error:') === 0) {
-            $errors++;
-            $error_messages[] = "Image #$image_id: $caption";
-            continue;
-          }
-          
-          // Update description
-          chatgpt_update_description($image_id, $caption);
-          $processed++;
-        }
+      // Get full path to original image
+      $image_path = chatgpt_get_image_path($image);
+      
+      if (!file_exists($image_path)) {
+        $errors++;
+        $error_messages[] = "Image #$image_id: File not found at $image_path";
+        continue;
       }
+      
+      // Generate caption for this image
+      $caption = chatgpt_generate_caption($image_path);
+      
+      if (strpos($caption, 'Error:') === 0) {
+        $errors++;
+        $error_messages[] = "Image #$image_id: $caption";
+        continue;
+      }
+      
+      // Update description
+      chatgpt_update_description($image_id, $caption);
+      $processed++;
     }
     
     // Show success/error messages
@@ -101,107 +66,8 @@ function chatgpt_handle_batch_action($action, $collection) {
     return true;
   }
   
-  // Function to generate captions for multiple images in a batch
-  function chatgpt_generate_captions_batch($images_data) {
-    global $conf;
-    if (!isset($conf['chatgpt_captioner'])) {
-      return array();
-    }
-    // Get API key and model from configuration
-    $chatgpt_conf = unserialize($conf['chatgpt_captioner']);
-    
-    // Validate configuration
-    if (empty($chatgpt_conf['api_key']) || $chatgpt_conf['api_key'] == 'your-gemini-api-key') {
-      return array_fill_keys(array_keys($images_data), "Error: API key not configured");
-    }
-    
-    $api_key = $chatgpt_conf['api_key'];
-    $model = $chatgpt_conf['model'];
-    $user_prompt = $chatgpt_conf['user_prompt'];
-    
-    // Prepare for parallel requests
-    $mh = curl_multi_init();
-    $curl_handles = [];
-    $results = [];
-    
-    // Create requests for each image
-    foreach ($images_data as $image_id => $image_data) {
-      // Prepare the API request
-      $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . $model . ':generateContent?key=' . $api_key;
-      $headers = [
-        'Content-Type: application/json'
-      ];
-      
-      $data = [
-        'contents' => [
-          [
-            'parts' => [
-              [
-                'text' => $user_prompt
-              ],
-              [
-                'inline_data' => [
-                  'mime_type' => 'image/jpeg',
-                  'data' => $image_data
-                ]
-              ]
-            ]
-          ]
-        ],
-        'generation_config' => [
-          'max_output_tokens' => 300,
-          'temperature' => 0.4
-        ]
-      ];
-      
-      // Initialize cURL session for this image
-      $ch = curl_init($url);
-      curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-      curl_setopt($ch, CURLOPT_POST, true);
-      curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-      curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-      curl_setopt($ch, CURLOPT_TIMEOUT, 60); // Increased timeout for batch processing
-      
-      // Store the handle and add to multi handle
-      $curl_handles[$image_id] = $ch;
-      curl_multi_add_handle($mh, $ch);
-    }
-    
-    // Execute all requests simultaneously
-    $running = null;
-    do {
-      curl_multi_exec($mh, $running);
-      curl_multi_select($mh); // Wait for activity on any connection
-    } while ($running > 0);
-    
-    // Process all responses
-    foreach ($curl_handles as $image_id => $ch) {
-      $response = curl_multi_getcontent($ch);
-      $err = curl_error($ch);
-      
-      if ($err) {
-        $results[$image_id] = "Error: $err";
-      } else {
-        $response_data = json_decode($response, true);
-        if (isset($response_data['candidates'][0]['content']['parts'][0]['text'])) {
-          $results[$image_id] = trim($response_data['candidates'][0]['content']['parts'][0]['text']);
-        } elseif (isset($response_data['error'])) {
-          $results[$image_id] = "API Error: " . $response_data['error']['message'];
-        } else {
-          $results[$image_id] = "Error: Unexpected API response format.";
-        }
-      }
-      
-      // Remove handle
-      curl_multi_remove_handle($mh, $ch);
-      curl_close($ch);
-    }
-    
-    // Close multi handle
-    curl_multi_close($mh);
-    
-    return $results;
-  }
+  // Function to generate captions has been simplified to process one image at a time
+  // The batch processing functionality was removed as Gemini's API doesn't support it
   
   // Helper function to get the file path for an image
   function chatgpt_get_image_path($element) {
