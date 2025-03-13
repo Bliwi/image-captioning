@@ -111,13 +111,12 @@ function chatgpt_handle_batch_action($action, $collection) {
     $chatgpt_conf = unserialize($conf['chatgpt_captioner']);
     
     // Validate configuration
-    if (empty($chatgpt_conf['api_key']) || $chatgpt_conf['api_key'] == 'sk-your-openai-api-key') {
+    if (empty($chatgpt_conf['api_key']) || $chatgpt_conf['api_key'] == 'your-gemini-api-key') {
       return array_fill_keys(array_keys($images_data), "Error: API key not configured");
     }
     
     $api_key = $chatgpt_conf['api_key'];
     $model = $chatgpt_conf['model'];
-    $system_role = $chatgpt_conf['system_role'];
     $user_prompt = $chatgpt_conf['user_prompt'];
     
     // Prepare for parallel requests
@@ -128,36 +127,31 @@ function chatgpt_handle_batch_action($action, $collection) {
     // Create requests for each image
     foreach ($images_data as $image_id => $image_data) {
       // Prepare the API request
-      $url = 'https://api.openai.com/v1/chat/completions';
+      $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . $model . ':generateContent?key=' . $api_key;
       $headers = [
-        'Content-Type: application/json',
-        "Authorization: Bearer $api_key",
+        'Content-Type: application/json'
       ];
       
       $data = [
-        'model' => $model,
-        'messages' => [
+        'contents' => [
           [
-            'role' => 'system',
-            'content' => $system_role,
-          ],
-          [
-            'role' => 'user',
-            'content' => [
+            'parts' => [
               [
-                'type' => 'text',
-                'text' => $user_prompt,
+                'text' => $user_prompt
               ],
               [
-                'type' => 'image_url',
-                'image_url' => [
-                  'url' => 'data:image/jpeg;base64,' . $image_data,
-                ],
-              ],
-            ],
-          ],
+                'inline_data' => [
+                  'mime_type' => 'image/jpeg',
+                  'data' => $image_data
+                ]
+              ]
+            ]
+          ]
         ],
-        'max_tokens' => 300,
+        'generation_config' => [
+          'max_output_tokens' => 300,
+          'temperature' => 0.4
+        ]
       ];
       
       // Initialize cURL session for this image
@@ -189,8 +183,8 @@ function chatgpt_handle_batch_action($action, $collection) {
         $results[$image_id] = "Error: $err";
       } else {
         $response_data = json_decode($response, true);
-        if (isset($response_data['choices'][0]['message']['content'])) {
-          $results[$image_id] = trim($response_data['choices'][0]['message']['content']);
+        if (isset($response_data['candidates'][0]['content']['parts'][0]['text'])) {
+          $results[$image_id] = trim($response_data['candidates'][0]['content']['parts'][0]['text']);
         } elseif (isset($response_data['error'])) {
           $results[$image_id] = "API Error: " . $response_data['error']['message'];
         } else {
@@ -234,25 +228,24 @@ function chatgpt_handle_batch_action($action, $collection) {
   }
   
   
-  // Function to generate caption for an image using ChatGPT API
+  // Function to generate caption for an image using Gemini API
   function chatgpt_generate_caption($image_path) {
     global $conf;
     
     // Get API key and model from configuration
     if (!isset($conf['chatgpt_captioner'])) {
-      return "Error: ChatGPT configuration not found";
+      return "Error: Gemini configuration not found";
     }
     // Get API key and model from configuration
     $chatgpt_conf = unserialize($conf['chatgpt_captioner']);
     
     // Validate configuration
-    if (empty($chatgpt_conf['api_key']) || $chatgpt_conf['api_key'] == 'sk-your-openai-api-key') {
+    if (empty($chatgpt_conf['api_key']) || $chatgpt_conf['api_key'] == 'your-gemini-api-key') {
       return "Error: API key not configured";
     }
     
     $api_key = $chatgpt_conf['api_key'];
     $model = $chatgpt_conf['model'];
-    $system_role = $chatgpt_conf['system_role'];
     $user_prompt = $chatgpt_conf['user_prompt'];
   
     // Check if file exists
@@ -275,36 +268,31 @@ function chatgpt_handle_batch_action($action, $collection) {
     }
   
     // Prepare the API request
-    $url = 'https://api.openai.com/v1/chat/completions';
+    $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . $model . ':generateContent?key=' . $api_key;
     $headers = [
-      'Content-Type: application/json',
-      "Authorization: Bearer $api_key",
+      'Content-Type: application/json'
     ];
   
     $data = [
-      'model' => $model,
-      'messages' => [
+      'contents' => [
         [
-          'role' => 'system',
-          'content' => $system_role,
-        ],
-        [
-          'role' => 'user',
-          'content' => [
+          'parts' => [
             [
-              'type' => 'text',
-              'text' => $user_prompt,
+              'text' => $user_prompt
             ],
             [
-              'type' => 'image_url',
-              'image_url' => [
-                'url' => 'data:image/jpeg;base64,' . $image_data,
-              ],
-            ],
-          ],
-        ],
+              'inline_data' => [
+                'mime_type' => 'image/jpeg',
+                'data' => $image_data
+              ]
+            ]
+          ]
+        ]
       ],
-      'max_tokens' => 300,
+      'generation_config' => [
+        'max_output_tokens' => 300,
+        'temperature' => 0.4
+      ]
     ];
   
     // Initialize cURL session
@@ -325,8 +313,8 @@ function chatgpt_handle_batch_action($action, $collection) {
     }
   
     $response_data = json_decode($response, true);
-    if (isset($response_data['choices'][0]['message']['content'])) {
-      return trim($response_data['choices'][0]['message']['content']);
+    if (isset($response_data['candidates'][0]['content']['parts'][0]['text'])) {
+      return trim($response_data['candidates'][0]['content']['parts'][0]['text']);
     } elseif (isset($response_data['error'])) {
       return "API Error: " . $response_data['error']['message'];
     } else {

@@ -1,10 +1,10 @@
 <div class="titrePage">
-  <h2>ChatGPT Image Captioner</h2>
+  <h2>Gemini Image Captioner</h2>
 </div>
 
 <div class="adminInfoPanel">
   <h3>About this Plugin</h3>
-  <p>This plugin uses OpenAI's GPT-4o model to automatically generate captions for your images.</p>
+  <p>This plugin uses Google's Gemini Pro Vision model to automatically generate captions for your images.</p>
   
   <h3>How to Use</h3>
   <ol>
@@ -21,7 +21,7 @@
     <legend>Configuration</legend>
     
     <div class="adminInfoPanel">
-      <h4>OpenAI API Settings</h4>
+      <h4>Google Gemini API Settings</h4>
       <p>
         <label for="api_key">API Key:</label>
         <input type="text" name="api_key" id="api_key" value="{$API_KEY}" size="50">
@@ -29,21 +29,14 @@
       <p>
         <label for="model">Model:</label>
         <select name="model" id="model">
-          <option value="gpt-4o" {if $MODEL == 'gpt-4o'}selected{/if}>GPT-4o</option>
-          <option value="gpt-4o-mini" {if $MODEL == 'gpt-4o-mini'}selected{/if}>GPT-4o-mini</option>
-          <option value="gpt-4-vision-preview" {if $MODEL == 'gpt-4-vision-preview'}selected{/if}>GPT-4 Vision</option>
-          <option value="gpt-4-turbo" {if $MODEL == 'gpt-4-turbo'}selected{/if}>GPT-4 Turbo</option>
+          <option value="gemini-2.0-flash" {if $MODEL == 'gemini-2.0-flash'}selected{/if}>Gemini 2.0 flash</option>
+          <option value="gemini-2.0-pro" {if $MODEL == 'gemini-2.0-pro'}selected{/if}>Gemini 2.0 pro</option>
         </select>
       </p>
     </div>
     
     <div class="adminInfoPanel">
       <h4>Caption Generation Settings</h4>
-      <p>
-        <label for="system_role">System Role:</label>
-        <textarea name="system_role" id="system_role" rows="3" cols="80">{$SYSTEM_ROLE}</textarea>
-        <small>Define how the AI should behave when generating captions.</small>
-      </p>
       <p>
         <label for="user_prompt">User Prompt:</label>
         <textarea name="user_prompt" id="user_prompt" rows="3" cols="80">{$USER_PROMPT}</textarea>

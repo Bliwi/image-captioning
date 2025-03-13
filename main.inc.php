@@ -1,8 +1,8 @@
 <?php
 /*
-Plugin Name: ChatGPT Image Captioner
+Plugin Name: Gemini Image Captioner
 Version: 1.1.0
-Description: Uses ChatGPT API (GPT-4o) to automatically generate captions for images
+Description: Uses Google Gemini API to automatically generate captions for images
 and add them to image descriptions.
 Author: bliwi
 */
@@ -21,7 +21,7 @@ if (defined('IN_ADMIN'))
   // Add menu entry to admin panel
   function chatgpt_admin_menu($menu) {
     $menu[] = array(
-      'NAME' => 'ChatGPT Captioner',
+      'NAME' => 'Gemini Captioner',
       'URL' => get_admin_plugin_menu_link(dirname(__FILE__) . '/admin.php'),
     );
     return $menu;
@@ -35,7 +35,7 @@ add_event_handler('loc_begin_element_set_global', 'chatgpt_add_batch_option');
     // Add our action to the list of available actions in the batch manager
     $template->append('element_set_global_plugins_actions', array(
       'ID' => 'chatgpt_caption',
-      'NAME' => 'Caption with ChatGPT',
+      'NAME' => 'Caption with Gemini',
       'ICON' => 'icon-comment'
     ));
   }
