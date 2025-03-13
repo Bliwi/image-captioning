@@ -211,6 +211,11 @@ function chatgpt_handle_batch_action($action, $collection) {
     list($width, $height) = getimagesize($image_path);
   
     // Calculate new dimensions
+    // Check for zero dimensions to prevent division by zero
+    if ($width <= 0 || $height <= 0) {
+      return false; // Cannot process an image with invalid dimensions
+    }
+    
     $ratio = min($max_dimension / $width, $max_dimension / $height);
     $new_width = round($width * $ratio);
     $new_height = round($height * $ratio);
