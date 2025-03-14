@@ -554,7 +554,7 @@ function chatgpt_update_description($image_id, $caption)
     $new_comment .= "\n\n";
   }
   */
-  $new_comment .= "AI Caption: " . $caption;
+  $new_comment = "AI Caption: " . $caption;
 
   // Update the image description in the database
   $query = "
