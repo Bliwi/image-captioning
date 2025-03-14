@@ -37,6 +37,12 @@ function chatgpt_handle_batch_action($action, $collection)
         continue;
       }
 
+      $current_comment = isset($image['comment']) ? $image['comment'] : '';
+      // Check if the image already has an AI caption
+      if (strpos($current_comment, 'AI Caption:') !== false) {
+        // Image already has an AI caption, don't add another one
+        return;
+      }
       // Get full path to original image
       $image_path = chatgpt_get_image_path($image);
 
