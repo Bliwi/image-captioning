@@ -2,6 +2,10 @@
 
 A Piwigo plugin that generates captions for your images using the ChatGPT API. The goal of the plugin is to generate captions for use with piwigo's Quick search feature to find images more easily and accessibility.
 
+# Gemini Branches are more up to date
+
+I have spent more time working on the gemini branches because the API is cheaper, allowing me to test and develop the code more.
+
 ---
 
 ## Requirements
@@ -26,6 +30,11 @@ Clone this repo inside of your piwigo/plugins folder.
    - Select the images you want to caption.
    - Choose the "Caption with ChatGPT" option from the available actions.
    - Captions will be automatically generated and saved for the selected images.
+  
+#### Important
+Using these API's will expose your private picutres to the api owners (Google, OpenAI), Do not caption images you are not comforatable with the idea of them being used for AI training by these companies.
+I recommend only using the processing on images that are already available on the internet.
+
 ---
 
 ## Notes
