@@ -232,80 +232,88 @@ function chatgpt_process_images_parallel($images) {
     } else {
       $response_data = json_decode($response, true);
       
+      // First, validate the response structure
+      if (empty($response_data)) {
+        $results[$index] = array(
+          'id' => $image_id,
+          'error' => 'Empty API response. Please check your API key and network connection.'
+        );
+        continue;
+      }
+      
+      // Check for API errors
+      if (isset($response_data['error'])) {
+        // Check for quota exhaustion error
+        if (strpos($response_data['error']['message'], 'Resource has been exhausted') !== false) {
+          // For quota errors, add to retry queue if under max retries
+          $max_retries = 3;
+          if ($info['retry_count'] < $max_retries) {
+            $retry_info[] = array(
+              'index' => $index,
+              'id' => $image_id,
+              'retry_count' => $info['retry_count'] + 1,
+              'data' => $info['data'],
+              'error' => $response_data['error']['message']
+            );
+          } else {
+            // Max retries exceeded
+            $results[$index] = array(
+              'id' => $image_id,
+              'error' => 'API Quota Error: Maximum retries exceeded. ' . $response_data['error']['message']
+            );
+          }
+          continue;
+        }
+        // Other API errors
+        $results[$index] = array(
+          'id' => $image_id,
+          'error' => 'API Error: ' . $response_data['error']['message']
+        );
+        continue;
+      }
+      
       // Check for successful response
       if (isset($response_data['candidates'][0]['content']['parts'][0]['text'])) {
         $results[$index] = array(
           'id' => $image_id,
           'caption' => trim($response_data['candidates'][0]['content']['parts'][0]['text'])
         );
-      } 
-      // Check for quota exhaustion error
-      elseif (
-        isset($response_data['error']) &&
-        strpos($response_data['error']['message'], 'Resource has been exhausted') !== false
-      ) {
-        // For quota errors, add to retry queue if under max retries
-        $max_retries = 3;
-        if ($info['retry_count'] < $max_retries) {
-          $retry_info[] = array(
-            'index' => $index,
-            'id' => $image_id,
-            'retry_count' => $info['retry_count'] + 1,
-            'data' => $info['data'],
-            'error' => $response_data['error']['message']
-          );
-        } else {
-          // Max retries exceeded
-          $results[$index] = array(
-            'id' => $image_id,
-            'error' => 'API Quota Error: Maximum retries exceeded. ' . $response_data['error']['message']
-          );
-        }
+        continue;
       }
-      // Check for other errors in the response
-      elseif (isset($response_data['error'])) {
-        $results[$index] = array(
-          'id' => $image_id,
-          'error' => 'API Error: ' . $response_data['error']['message']
-        );
-      } 
-      // Check for empty response
-      elseif (empty($response_data)) {
-        $results[$index] = array(
-          'id' => $image_id,
-          'error' => 'Empty API response. Please check your API key and network connection.'
-        );
-      }
-      // Check for missing candidates
-      elseif (!isset($response_data['candidates']) || empty($response_data['candidates'])) {
+      
+      // Check for missing or malformed response structure
+      if (!isset($response_data['candidates']) || empty($response_data['candidates'])) {
         $results[$index] = array(
           'id' => $image_id,
           'error' => 'API returned no candidates. The model may have rejected the request due to content policy.'
         );
+        continue;
       }
-      // Check for malformed candidates structure
-      elseif (isset($response_data['candidates']) && !isset($response_data['candidates'][0]['content'])) {
+      
+      if (!isset($response_data['candidates'][0]['content'])) {
         $results[$index] = array(
           'id' => $image_id,
           'error' => 'Unexpected API response format: Missing content in candidates.'
         );
+        continue;
       }
-      // Check for missing parts in content
-      elseif (isset($response_data['candidates'][0]['content']) && !isset($response_data['candidates'][0]['content']['parts'])) {
+      
+      if (!isset($response_data['candidates'][0]['content']['parts'])) {
         $results[$index] = array(
           'id' => $image_id,
           'error' => 'Unexpected API response format: Missing parts in content.'
         );
+        continue;
       }
+      
       // Catch-all for any other unexpected response format
-      else {
-        $results[$index] = array(
-          'id' => $image_id,
-          'error' => 'Unexpected API response format. Please check the API documentation for changes.'
-        );
-      }
+      $results[$index] = array(
+        'id' => $image_id,
+        'error' => 'Unexpected API response format. Please check the API documentation for changes.'
+      );
+      continue;
     }
-    
+
     // Remove the handle
     curl_multi_remove_handle($mh, $ch);
     curl_close($ch);
@@ -350,37 +358,72 @@ function chatgpt_process_images_parallel($images) {
       } else {
         $response_data = json_decode($response, true);
         
+        // First, validate the response structure
+        if (empty($response_data)) {
+          $results[$retry['index']] = array(
+            'id' => $retry['id'],
+            'error' => 'Empty API response. Please check your API key and network connection.'
+          );
+          continue;
+        }
+        
+        // Check for API errors
+        if (isset($response_data['error'])) {
+          // Check for quota exhaustion error
+          if (strpos($response_data['error']['message'], 'Resource has been exhausted') !== false) {
+            $results[$retry['index']] = array(
+              'id' => $retry['id'],
+              'error' => 'API Quota Error: Still exhausted after retry. ' . $response_data['error']['message']
+            );
+          } else {
+            // Other API errors
+            $results[$retry['index']] = array(
+              'id' => $retry['id'],
+              'error' => 'API Error on retry: ' . $response_data['error']['message']
+            );
+          }
+          continue;
+        }
+        
         // Check for successful response
         if (isset($response_data['candidates'][0]['content']['parts'][0]['text'])) {
           $results[$retry['index']] = array(
             'id' => $retry['id'],
             'caption' => trim($response_data['candidates'][0]['content']['parts'][0]['text'])
           );
-        } 
-        // Still getting quota error after retry
-        elseif (
-          isset($response_data['error']) &&
-          strpos($response_data['error']['message'], 'Resource has been exhausted') !== false
-        ) {
+          continue;
+        }
+        
+        // Check for missing or malformed response structure
+        if (!isset($response_data['candidates']) || empty($response_data['candidates'])) {
           $results[$retry['index']] = array(
             'id' => $retry['id'],
-            'error' => 'API Quota Error: Still exhausted after retry. ' . $response_data['error']['message']
+            'error' => 'API returned no candidates. The model may have rejected the request due to content policy.'
           );
+          continue;
         }
-        // Other errors
-        elseif (isset($response_data['error'])) {
+        
+        if (!isset($response_data['candidates'][0]['content'])) {
           $results[$retry['index']] = array(
             'id' => $retry['id'],
-            'error' => 'API Error on retry: ' . $response_data['error']['message']
+            'error' => 'Unexpected API response format: Missing content in candidates.'
           );
+          continue;
         }
-        // Empty or unexpected response
-        else {
+        
+        if (!isset($response_data['candidates'][0]['content']['parts'])) {
           $results[$retry['index']] = array(
             'id' => $retry['id'],
-            'error' => 'Unexpected API response format on retry.'
+            'error' => 'Unexpected API response format: Missing parts in content.'
           );
+          continue;
         }
+        
+        // Catch-all for any other unexpected response format
+        $results[$retry['index']] = array(
+          'id' => $retry['id'],
+          'error' => 'Unexpected API response format. Please check the API documentation for changes.'
+        );
       }
     }
   }
