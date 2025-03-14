@@ -122,6 +122,7 @@ function chatgpt_process_images_parallel($images) {
   $mh = curl_multi_init();
   $curl_handles = array();
   $results = array();
+  $retry_info = array(); // Track retry information for quota errors
   
   // Initialize each request
   foreach ($images as $index => $image) {
@@ -194,7 +195,9 @@ function chatgpt_process_images_parallel($images) {
     // Store image ID with the handle for later reference
     $curl_handles[$index] = array(
       'handle' => $ch,
-      'id' => $image_id
+      'id' => $image_id,
+      'retry_count' => 0, // Initialize retry count
+      'data' => $data // Store request data for potential retries
     );
     
     // Add the handle to the multi-curl
@@ -241,12 +244,23 @@ function chatgpt_process_images_parallel($images) {
         isset($response_data['error']) &&
         strpos($response_data['error']['message'], 'Resource has been exhausted') !== false
       ) {
-        // For quota errors in parallel processing, we can't retry here
-        // but we can provide a more specific error message
-        $results[$index] = array(
-          'id' => $image_id,
-          'error' => 'API Quota Error: ' . $response_data['error']['message'] . ' (Try again later)'
-        );
+        // For quota errors, add to retry queue if under max retries
+        $max_retries = 3;
+        if ($info['retry_count'] < $max_retries) {
+          $retry_info[] = array(
+            'index' => $index,
+            'id' => $image_id,
+            'retry_count' => $info['retry_count'] + 1,
+            'data' => $info['data'],
+            'error' => $response_data['error']['message']
+          );
+        } else {
+          // Max retries exceeded
+          $results[$index] = array(
+            'id' => $image_id,
+            'error' => 'API Quota Error: Maximum retries exceeded. ' . $response_data['error']['message']
+          );
+        }
       }
       // Check for other errors in the response
       elseif (isset($response_data['error'])) {
@@ -255,13 +269,35 @@ function chatgpt_process_images_parallel($images) {
           'error' => 'API Error: ' . $response_data['error']['message']
         );
       } 
-      // Check for empty or unexpected response format
-      elseif (empty($response_data) || !isset($response_data['candidates'])) {
+      // Check for empty response
+      elseif (empty($response_data)) {
         $results[$index] = array(
           'id' => $image_id,
-          'error' => 'Empty or invalid API response. Please check your API key and model settings.'
+          'error' => 'Empty API response. Please check your API key and network connection.'
         );
       }
+      // Check for missing candidates
+      elseif (!isset($response_data['candidates']) || empty($response_data['candidates'])) {
+        $results[$index] = array(
+          'id' => $image_id,
+          'error' => 'API returned no candidates. The model may have rejected the request due to content policy.'
+        );
+      }
+      // Check for malformed candidates structure
+      elseif (isset($response_data['candidates']) && !isset($response_data['candidates'][0]['content'])) {
+        $results[$index] = array(
+          'id' => $image_id,
+          'error' => 'Unexpected API response format: Missing content in candidates.'
+        );
+      }
+      // Check for missing parts in content
+      elseif (isset($response_data['candidates'][0]['content']) && !isset($response_data['candidates'][0]['content']['parts'])) {
+        $results[$index] = array(
+          'id' => $image_id,
+          'error' => 'Unexpected API response format: Missing parts in content.'
+        );
+      }
+      // Catch-all for any other unexpected response format
       else {
         $results[$index] = array(
           'id' => $image_id,
@@ -277,6 +313,77 @@ function chatgpt_process_images_parallel($images) {
   
   // Close the multi-curl handle
   curl_multi_close($mh);
+  
+  // Process any retries for quota errors
+  if (!empty($retry_info)) {
+    // Wait before retrying (increasing delay based on retry count)
+    $base_delay = 3; // seconds
+    $max_delay = 10; // maximum delay in seconds
+    
+    foreach ($retry_info as $retry) {
+      // Calculate delay with exponential backoff
+      $delay = min($base_delay * pow(2, $retry['retry_count'] - 1), $max_delay);
+      sleep($delay);
+      
+      // Retry the request
+      $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . $model . ':generateContent?key=' . $api_key;
+      $headers = [
+        'Content-Type: application/json'
+      ];
+      
+      $ch = curl_init($url);
+      curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+      curl_setopt($ch, CURLOPT_POST, true);
+      curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($retry['data']));
+      curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+      curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+      
+      $response = curl_exec($ch);
+      $err = curl_error($ch);
+      curl_close($ch);
+      
+      if ($err) {
+        $results[$retry['index']] = array(
+          'id' => $retry['id'],
+          'error' => $err
+        );
+      } else {
+        $response_data = json_decode($response, true);
+        
+        // Check for successful response
+        if (isset($response_data['candidates'][0]['content']['parts'][0]['text'])) {
+          $results[$retry['index']] = array(
+            'id' => $retry['id'],
+            'caption' => trim($response_data['candidates'][0]['content']['parts'][0]['text'])
+          );
+        } 
+        // Still getting quota error after retry
+        elseif (
+          isset($response_data['error']) &&
+          strpos($response_data['error']['message'], 'Resource has been exhausted') !== false
+        ) {
+          $results[$retry['index']] = array(
+            'id' => $retry['id'],
+            'error' => 'API Quota Error: Still exhausted after retry. ' . $response_data['error']['message']
+          );
+        }
+        // Other errors
+        elseif (isset($response_data['error'])) {
+          $results[$retry['index']] = array(
+            'id' => $retry['id'],
+            'error' => 'API Error on retry: ' . $response_data['error']['message']
+          );
+        }
+        // Empty or unexpected response
+        else {
+          $results[$retry['index']] = array(
+            'id' => $retry['id'],
+            'error' => 'Unexpected API response format on retry.'
+          );
+        }
+      }
+    }
+  }
   
   return $results;
 }
