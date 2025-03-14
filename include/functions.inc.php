@@ -236,16 +236,36 @@ function chatgpt_process_images_parallel($images) {
           'caption' => trim($response_data['candidates'][0]['content']['parts'][0]['text'])
         );
       } 
-      // Check for errors in the response
+      // Check for quota exhaustion error
+      elseif (
+        isset($response_data['error']) &&
+        strpos($response_data['error']['message'], 'Resource has been exhausted') !== false
+      ) {
+        // For quota errors in parallel processing, we can't retry here
+        // but we can provide a more specific error message
+        $results[$index] = array(
+          'id' => $image_id,
+          'error' => 'API Quota Error: ' . $response_data['error']['message'] . ' (Try again later)'
+        );
+      }
+      // Check for other errors in the response
       elseif (isset($response_data['error'])) {
         $results[$index] = array(
           'id' => $image_id,
           'error' => 'API Error: ' . $response_data['error']['message']
         );
-      } else {
+      } 
+      // Check for empty or unexpected response format
+      elseif (empty($response_data) || !isset($response_data['candidates'])) {
         $results[$index] = array(
           'id' => $image_id,
-          'error' => 'Unexpected API response format.'
+          'error' => 'Empty or invalid API response. Please check your API key and model settings.'
+        );
+      }
+      else {
+        $results[$index] = array(
+          'id' => $image_id,
+          'error' => 'Unexpected API response format. Please check the API documentation for changes.'
         );
       }
     }
@@ -548,7 +568,7 @@ function chatgpt_update_description($image_id, $caption)
   $current_comment = isset($image['comment']) ? $image['comment'] : '';
 
   // Prepare the new comment
-  /* Replacing the description
+  /* Replacing the description leaving this here for future config implementation
   $new_comment = $current_comment;
   if (!empty($current_comment)) {
     $new_comment .= "\n\n";
