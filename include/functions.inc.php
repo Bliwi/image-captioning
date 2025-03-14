@@ -26,7 +26,8 @@ function chatgpt_handle_batch_action($action, $collection)
     foreach ($batch as $image_id) {
       // Get the image path
       $query = "
-          SELECT path 
+          SELECT path,
+          comment
           FROM " . IMAGES_TABLE . " 
           WHERE id = " . $image_id;
       $result = pwg_query($query);
@@ -37,11 +38,10 @@ function chatgpt_handle_batch_action($action, $collection)
         continue;
       }
 
-      $current_comment = isset($image['comment']) ? $image['comment'] : '';
       // Check if the image already has an AI caption
-      if (strpos($current_comment, 'AI Caption:') !== false) {
+      if (isset($image['comment'])) {
         $errors++;
-        $error_messages[] = "Image #$image_id: Already captioned.";
+        $error_messages[] = "Image #$image_id: Image already has a descrition, skipping.";
         continue;
       }
       // Get full path to original image
@@ -548,10 +548,12 @@ function chatgpt_update_description($image_id, $caption)
   $current_comment = isset($image['comment']) ? $image['comment'] : '';
 
   // Prepare the new comment
+  /* Replacing the description
   $new_comment = $current_comment;
   if (!empty($current_comment)) {
     $new_comment .= "\n\n";
   }
+  */
   $new_comment .= "AI Caption: " . $caption;
 
   // Update the image description in the database
