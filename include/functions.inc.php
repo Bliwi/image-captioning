@@ -8,7 +8,7 @@ function chatgpt_handle_batch_action($action, $collection)
   if ($action !== 'chatgpt_caption') {
     return;
   }
-
+  chatgpt_cleanup_special_characters();
   // Process images in batches of 5
   $processed = 0;
   $errors = 0;
@@ -737,4 +737,53 @@ function chatgpt_update_description($image_id, $caption)
       WHERE id = " . $image_id;
 
   pwg_query($query);
+}
+function chatgpt_cleanup_special_characters()
+{
+  global $page;
+  
+  // Query to find images with special characters in comments
+  $query = "
+    SELECT id, comment 
+    FROM " . IMAGES_TABLE . "
+    WHERE comment LIKE '%*%' 
+       OR comment LIKE '%#%'
+       OR comment LIKE '%[%'
+       OR comment LIKE '%]%'";
+  
+  $result = pwg_query($query);
+  $processed = 0;
+  $errors = 0;
+  
+  while ($row = pwg_db_fetch_assoc($result)) {
+    // Clean the comment by removing special characters
+    $cleaned_comment = str_replace(['*', '#', '[', ']'], '', $row['comment']);
+    
+    // Update the image description in the database
+    $update_query = "
+      UPDATE " . IMAGES_TABLE . "
+      SET comment = '" . pwg_db_real_escape_string($cleaned_comment) . "'
+      WHERE id = " . $row['id'];
+    
+    if (pwg_query($update_query)) {
+      $processed++;
+    } else {
+      $errors++;
+    }
+  }
+  
+  // Show success/error messages
+  if ($processed > 0) {
+    $page['infos'][] = "Successfully cleaned special characters from $processed image comments.";
+  }
+  
+  if ($errors > 0) {
+    $page['errors'][] = "Failed to clean special characters from $errors image comments.";
+  }
+  
+  if ($processed == 0 && $errors == 0) {
+    $page['infos'][] = "No images found with special characters in comments.";
+  }
+  
+  return true;
 }
