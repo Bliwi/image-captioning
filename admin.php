@@ -5,7 +5,7 @@ defined('PHPWG_ROOT_PATH') or die('Hacking attempt!');
 global $template, $page, $conf;
 
 // Include background processing functions
-include_once(dirname(__FILE__) . '/include/background_process.php');
+//include_once(dirname(__FILE__) . '/include/background_process.php');
 
 // Include Piwigo admin functions
 include_once(PHPWG_ROOT_PATH.'admin/include/functions.php');

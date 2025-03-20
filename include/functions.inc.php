@@ -717,14 +717,18 @@ function chatgpt_update_description($image_id, $caption)
 
   $current_comment = isset($image['comment']) ? $image['comment'] : '';
 
-  // Prepare the new comment
+
   /* Replacing the description leaving this here for future config implementation
   $new_comment = $current_comment;
   if (!empty($current_comment)) {
     $new_comment .= "\n\n";
   }
   */
-  $new_comment = "AI Caption: " . $caption;
+  // Clean the caption by removing special characters
+  $cleaned_caption = str_replace(['*', '#', '[', ']'], '', $caption);
+
+  // Prepare the new comment
+  $new_comment = "AI Caption: " . $cleaned_caption;
 
   // Update the image description in the database
   $query = "
