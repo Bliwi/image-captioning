@@ -1,6 +1,6 @@
-# Piwigo ChatGPT Caption Generator
+# Piwigo Image Caption Generator
 
-A Piwigo plugin that generates captions for your images using the ChatGPT API. The goal of the plugin is to generate captions for use with piwigo's Quick search feature to find images more easily and accessibility.
+A Piwigo plugin that generates captions for your images using the Gemini API. The goal of the plugin is to generate captions for use with piwigo's Quick search feature to find images more easily and accessibility.
 
 # Gemini Branches are more up to date
 
