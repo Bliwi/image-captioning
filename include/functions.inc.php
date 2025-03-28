@@ -8,7 +8,7 @@ function chatgpt_handle_batch_action($action, $collection)
   if ($action !== 'chatgpt_caption') {
     return;
   }
-  chatgpt_cleanup_special_characters();
+  //chatgpt_cleanup_special_characters();
   // Process images in batches of 5
   $processed = 0;
   $errors = 0;
@@ -725,7 +725,7 @@ function chatgpt_update_description($image_id, $caption)
   }
   */
   // Clean the caption by removing special characters
-  $cleaned_caption = str_replace(['*', '#', '[', ']'], '', $caption);
+  $cleaned_caption = str_replace(['*', '#', '[', ']', 'AI Caption:'], '', $caption);
 
   // Prepare the new comment
   $new_comment = "AI Caption: " . $cleaned_caption;
@@ -749,7 +749,8 @@ function chatgpt_cleanup_special_characters()
     WHERE comment LIKE '%*%' 
        OR comment LIKE '%#%'
        OR comment LIKE '%[%'
-       OR comment LIKE '%]%'";
+       OR comment LIKE '%]%'
+       OR comment LIKE '%AI Caption%'";
   
   $result = pwg_query($query);
   $processed = 0;
@@ -757,7 +758,7 @@ function chatgpt_cleanup_special_characters()
   
   while ($row = pwg_db_fetch_assoc($result)) {
     // Clean the comment by removing special characters
-    $cleaned_comment = str_replace(['*', '#', '[', ']'], '', $row['comment']);
+    $cleaned_comment = str_replace(['*', '#', '[', ']', 'AI Caption:'], '', $row['comment']);
     
     // Update the image description in the database
     $update_query = "
